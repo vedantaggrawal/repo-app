@@ -11,8 +11,8 @@ on:
       - main
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: ${{ github.repository }} # Assumes your Docker Hub username matches your GitHub username
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   lint-and-test:
@@ -45,8 +45,8 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Extract metadata (tags, labels) for Docker
         id: meta
