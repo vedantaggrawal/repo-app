@@ -40,8 +40,7 @@ spec:
         - image: registry.access.redhat.com/ubi9/ubi-micro
           name: noop-task
           script: |
-            echo "Building app..."
-            ls -la
+            exit 0
           workingDir: $(workspaces.source.path)
         workspaces:
         - name: source
@@ -62,4 +61,4 @@ spec:
             storage: 1Gi
   - name: basic-auth
     secret:
-      secretName: '{{ github-token }}'
+      secretName: '{{ git_auth_secret }}'
