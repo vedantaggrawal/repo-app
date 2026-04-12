@@ -4,7 +4,7 @@ This repository contains the source code for a lightweight, dockerized web serve
 
 ## Features
 
-- **Nginx SSI**: Creativity point! Instead of writing code in Go or Python to render the date, we use Nginx Server-Side Includes (SSI) to dynamically inject `<--# echo var="time_local" -->` on every page load. This keeps the image size tiny, avoids compilation times, and leverages the robust Nginx engine.
+- **Client-Side Rendering**: In order to guarantee accuracy for globally distributed users, the timestamp is rendered dynamically at the edge using client-side JavaScript instead of relying on the server's backend timezone, displaying the user's local browser time natively.
 - **OpenShift Compatibility**: The Dockerfile builds an image explicitly designed to support OpenShift's arbitrary UID approach. It uses port `8080`, and correctly applies `chgrp 0` to required configuration and cache paths so any assigned non-root user can run it perfectly.
 - **CI Pipeline**: Includes a GitHub Action workflow to lint the HTML, build the container, perform static vulnerability analysis (Trivy), push the image, and output what *would* be the commit step to the downstream `repo-platform`.
 

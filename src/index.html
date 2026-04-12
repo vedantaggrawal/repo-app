@@ -38,7 +38,19 @@
 <body>
     <div class="container">
         <h1>Hello DevOps O&Si Vedant Aggrawal</h1>
-        <div class="date"><!--# echo var="time_local" --></div>
+        <div class="date" id="current-date"></div>
     </div>
+    <script>
+        // Use client-side JS to show the date in the user's timezone instead of server's timezone
+        document.getElementById('current-date').innerText = new Date().toLocaleString(undefined, { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZoneName: 'short'
+        });
+    </script>
 </body>
 </html>
