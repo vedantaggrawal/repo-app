@@ -40,7 +40,8 @@ spec:
         - image: registry.access.redhat.com/ubi9/ubi-micro
           name: noop-task
           script: |
-            exit 0
+            echo "Building app..."
+            ls -la
           workingDir: $(workspaces.source.path)
         workspaces:
         - name: source
