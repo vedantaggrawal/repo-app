@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -19,10 +21,10 @@ jobs:
           npm install -g htmlhint
           htmlhint src/index.html
 
-  # Push to main — build artifact with sha tag
+  # PR or push to main — build artifact with sha tag
   build:
     needs: lint-and-test
-    if: github.ref == 'refs/heads/main'
+    if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
     permissions:
       contents: read
