@@ -107,14 +107,15 @@ The full local environment is provisioned with Terraform, which creates a Kind c
 
 ### Architecture Overview
 
-The setup spans four repositories:
+The setup spans five repositories:
 
 | Repository | Purpose |
 |---|---|
-| `repo-app` | Application source code + CI pipeline |
-| `repo-app-gitops` | Per-environment Helm values for apps |
-| `repo-platform-gitops` | ArgoCD ApplicationSets + platform tool configs |
-| `repo-platform-infra` | Terraform for Kind cluster + ArgoCD bootstrap |
+| [repo-app](https://github.com/vedantaggrawal/repo-app) | Application source code + CI pipeline |
+| [repo-app-gitops](https://github.com/vedantaggrawal/repo-app-gitops) | Per-environment Helm values for apps |
+| [repo-helm-chart](https://github.com/vedantaggrawal/repo-helm-chart) | Reusable generic Helm chart |
+| [repo-platform-gitops](https://github.com/vedantaggrawal/repo-platform-gitops) | ArgoCD ApplicationSets + platform tool configs |
+| [repo-platform](https://github.com/vedantaggrawal/repo-platform) | Terraform for Kind cluster + ArgoCD bootstrap |
 
 ### Prerequisites
 
