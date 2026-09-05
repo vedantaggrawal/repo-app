@@ -1,5 +1,12 @@
 """Tests for the platform-facing surface: probes, identity, metrics."""
 
+import logging
+
+import pytest
+from pydantic import ValidationError
+
+from app.config import Settings
+
 
 def test_healthz_is_ok(client):
     response = client.get("/healthz")
@@ -79,3 +86,42 @@ def test_index_serves_the_frontend(client):
 def test_static_assets_are_served(client):
     assert client.get("/assets/app.css").status_code == 200
     assert client.get("/assets/app.js").status_code == 200
+
+
+class TestLogLevelNormalization:
+    """`LOG_LEVEL=warn` is what the prod values file sets. Python's logging
+    accepts WARN as an alias; uvicorn does not, and passing it through crashed
+    the process at startup before it served anything."""
+
+    @pytest.mark.parametrize(
+        ("configured", "expected"),
+        [
+            ("warn", "WARNING"),
+            ("WARN", "WARNING"),
+            ("  warn  ", "WARNING"),
+            ("fatal", "CRITICAL"),
+            ("trace", "DEBUG"),
+            ("debug", "DEBUG"),
+            ("info", "INFO"),
+            ("WARNING", "WARNING"),
+        ],
+    )
+    def test_aliases_and_case_are_normalized(self, monkeypatch, configured, expected):
+        monkeypatch.setenv("LOG_LEVEL", configured)
+
+        assert Settings().log_level == expected
+
+    def test_numeric_level_is_what_uvicorn_receives(self, monkeypatch):
+        monkeypatch.setenv("LOG_LEVEL", "warn")
+
+        # uvicorn rejects the string "warn" but accepts the int.
+        assert Settings().log_level_number == logging.WARNING
+
+    def test_unknown_level_is_rejected_with_a_useful_message(self, monkeypatch):
+        monkeypatch.setenv("LOG_LEVEL", "verbose")
+
+        with pytest.raises(ValidationError, match="unknown log level"):
+            Settings()
+
+    def test_default_is_info(self):
+        assert Settings().log_level == "INFO"

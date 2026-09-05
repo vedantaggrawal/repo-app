@@ -81,7 +81,7 @@ def main() -> None:
         "app.main:app",
         host=settings.host,
         port=settings.port,
-        log_level=settings.log_level.lower(),
+        log_level=settings.log_level_number,
         access_log=True,
     )
 
