@@ -1,35 +1,125 @@
-# DevOps Test Webserver
+# DevOps Test Webserver — Platform Demo Console
 
-Lightweight, dockerized Nginx webserver built for the VodafoneZiggo DevOps O&Si assessment. Displays a greeting with a dynamic client-side timestamp.
+A FastAPI service with a small web console, built for the VodafoneZiggo DevOps
+O&Si assessment. It replaces the original static Nginx page with an application
+that actually exercises the platform it runs on: every control in the UI produces
+metrics in Mimir, logs in Loki and traces in Tempo.
+
+## What it does
+
+The console shows which pod served your request and gives you controls to drive
+traffic through the cluster:
+
+- **Serving pod** — pod, node, namespace, version, git SHA and uptime. Reload to
+  watch requests round-robin across replicas.
+- **Traffic controls** — generate load at a chosen latency, concurrency and CPU
+  cost; fire deliberate errors; make a downstream call; inspect trace headers.
+- **Readiness toggle** — mark the pod unready to demonstrate it dropping out of
+  the Service endpoints without being restarted.
+- **Session stats** — client-side request count, success/failure split and
+  p50/p95 latency, for a quick read before you open Grafana.
+
+## Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /` | The web console |
+| `GET /healthz` | Liveness probe — process is up |
+| `GET /readyz` | Readiness probe — `503` when the pod is marked unready |
+| `GET /metrics` | Prometheus exposition |
+| `GET /docs` | OpenAPI documentation |
+| `GET /api/info` | Build and pod identity |
+| `GET /api/work?ms=&burn_ms=&jitter=` | Spend time awaiting I/O and/or burning CPU |
+| `GET /api/error?code=&message=` | Return a deliberate error |
+| `GET /api/echo` | Echo the request, highlighting trace-context headers |
+| `GET /api/downstream?url=` | Make an outbound HTTP call (adds a span to the trace) |
+| `POST /api/ready?ready=` | Toggle this pod's readiness flag |
+
+`ms` is capped at 10s and `burn_ms` at 2s, so the demo controls cannot be used to
+take the pod down.
 
 ## Prerequisites
 
-- Docker (or Podman)
-- GitHub account with access to GHCR (`ghcr.io`)
-
-## Building the Docker Image Locally
-
-```sh
-docker build -t devops-test-webserver:latest .
-```
-
-The image is based on `nginx:alpine` and runs as non-root user `1001` on port `8080`, making it compatible with OpenShift's arbitrary UID policy.
+- Python 3.13 (3.11+ works) for local development
+- Docker (or Podman) to build the image
 
 ## Running Locally
 
+### With Python
+
 ```sh
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m app.main
+```
+
+### With Docker
+
+```sh
+docker build -t devops-test-webserver:latest .
 docker run -p 8080:8080 devops-test-webserver:latest
 ```
 
-Open `http://localhost:8080` — you should see the greeting and your local time.
+Open `http://localhost:8080`.
 
-### Environment Variables
+The image is Debian-slim based and runs as non-root user `1001` on port `8080`,
+making it compatible with OpenShift's arbitrary UID policy.
 
-No environment variables are required. The webserver serves static HTML with client-side JavaScript for the timestamp.
+> **Why not Alpine?** The platform's OpenTelemetry operator injects its Python
+> auto-instrumentation from an init container built against glibc. On a musl
+> base that injection fails at runtime, so the smaller image would cost us the
+> distributed tracing the cluster is built around.
 
-### Nginx Configuration
+## Configuration
 
-Custom config is in `nginx/default.conf`. It listens on `8080` (non-privileged port) and serves from `/usr/share/nginx/html`.
+All configuration is environment-based. Every value has a working default, so
+the app runs with no configuration at all.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENVIRONMENT` | `local` | `local` / `dev` / `stg` / `prod` — matches the GitOps directories |
+| `APP_VERSION` | build arg | Reported on `/api/info` and `app_build_info` |
+| `GIT_SHA` | build arg | Commit the image was built from |
+| `LOG_LEVEL` | `INFO` | Root log level |
+| `PORT` | `8080` | Listen port |
+| `POD_NAME` / `NODE_NAME` / `NAMESPACE` | `local` | Set via the Downward API in the chart |
+| `DOWNSTREAM_URL` | self | Target for `/api/downstream` |
+| `DOWNSTREAM_TIMEOUT_SECONDS` | `5.0` | Downstream call timeout |
+
+`APP_VERSION` and `GIT_SHA` are baked in at build time as defaults, but are read
+from the environment at startup — so the release tag can be set by the Helm
+chart without rebuilding the image (see *Releasing to Production* below).
+
+## Observability
+
+The app is designed against the platform's existing stack rather than shipping
+its own agents:
+
+- **Metrics** — `/metrics` exposes `http_requests_total`,
+  `http_request_duration_seconds`, `http_requests_in_progress` and
+  `app_build_info`. The `path` label is the *route template* (`/api/work`, not
+  `/api/work?ms=250`), so query strings cannot inflate series cardinality.
+- **Logs** — one JSON object per line on stdout, for Alloy to ship to Loki. When
+  trace correlation is on, each line carries `trace_id` and `span_id`, linking a
+  Loki line to its Tempo trace.
+- **Traces** — there is deliberately **no OpenTelemetry SDK code in this repo**.
+  The platform's operator injects it at admission when the pod carries:
+
+  ```yaml
+  annotations:
+    instrumentation.opentelemetry.io/inject-python: "opentelemetry-operator/default"
+  ```
+
+  FastAPI, Starlette and httpx are then instrumented automatically. Adding the
+  SDK here would double-instrument and pin a version the operator also controls.
+
+## Testing
+
+```sh
+ruff check .          # lint
+ruff format --check . # formatting
+pytest -q             # tests
+```
 
 ## CI/CD Pipeline
 
@@ -39,19 +129,23 @@ The pipeline is defined in `.github/workflows/ci.yaml` and has two flows:
 
 Triggers on every pull request and push to `main`:
 
-1. **Lint** — `htmlhint` validates `src/index.html`
-2. **Build** — Docker image built locally via BuildKit
+1. **Lint and test** — `ruff check`, `ruff format --check`, then `pytest`
+2. **Build** — Docker image built locally via BuildKit for scanning
 3. **Scan** — Trivy scans for CRITICAL/HIGH vulnerabilities (blocks on failure)
-4. **Push** — Image pushed to `ghcr.io/<org>/repo-app:sha-<short-sha>`
+4. **Push** — multi-arch image pushed to `ghcr.io/<org>/repo-app:sha-<short-sha>`
+
+The image is built once single-arch for the scan, then built and pushed for
+`linux/amd64` and `linux/arm64` once it is known to be clean.
 
 ### Promote (git tag)
 
 Triggers when a semver tag (`v*.*.*`) is pushed:
 
-1. **Scan** — Trivy runs SAST on the existing `sha-<sha>` image
-2. **Promote** — Image is retagged and pushed to `ghcr.io/<org>/repo-app-release:<tag>`
+1. **Scan** — Trivy scans the existing `sha-<sha>` image
+2. **Promote** — image is retagged and pushed to `ghcr.io/<org>/repo-app-release:<tag>`
 
-No rebuild — the promote step copies the already-built image to the release registry.
+No rebuild — the promote step copies the already-built image, so the released
+bits are byte-identical to the tested ones.
 
 ### Image Registries
 
@@ -68,7 +162,10 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This triggers the promote job, which scans and copies the image to the release repo. Update `prod/values.yaml` in the GitOps repo with the new tag.
+This triggers the promote job, which scans and copies the image to the release
+repo. Update `prod/values.yaml` in the GitOps repo with the new tag, and set
+`APP_VERSION` there to match — the promoted image is not rebuilt, so it carries
+the build-time default until the chart overrides it.
 
 ## Deploying on OpenShift / Kubernetes
 
@@ -228,7 +325,7 @@ Your browser will show a certificate warning — click **Advanced** → **Procee
 kubectl port-forward svc/devops-test-webserver -n devops-test-webserver 8080:8080
 ```
 
-Open `http://localhost:8080` to see the greeting page.
+Open `http://localhost:8080` to reach the console.
 
 ### Tearing Down
 
@@ -241,7 +338,19 @@ This removes the Kind cluster and all resources.
 
 ## Additional Considerations
 
-- **Non-root**: The container runs as UID `1001`. All Nginx writable paths (`/var/run/nginx.pid`, `/var/cache/nginx`, `/var/log/nginx`) are group-writable for OpenShift compatibility.
-- **Multi-arch**: CI builds `linux/amd64` and `linux/arm64` images (Apple Silicon compatible).
-- **Vulnerability scanning**: Trivy runs on every build and on every promote. CRITICAL/HIGH findings block the pipeline.
-- **GitOps**: ArgoCD watches the gitops repo and auto-syncs on `values.yaml` changes. Production changes require CODEOWNERS review.
+- **Non-root**: The container runs as UID `1001` in the root group, with `/app`
+  and the virtualenv group-accessible for OpenShift's arbitrary UID policy.
+- **Multi-arch**: CI builds `linux/amd64` and `linux/arm64` images (Apple Silicon
+  compatible). All dependencies ship manylinux wheels for both, so nothing is
+  compiled under emulation.
+- **Vulnerability scanning**: Trivy runs on every build and every promote.
+  CRITICAL/HIGH findings block the pipeline. The runtime stage runs
+  `apt-get upgrade` so the image picks up security fixes published since the base
+  image was tagged.
+- **No build step for the frontend**: the console is plain HTML, CSS and
+  JavaScript, so the image ships exactly those bytes and adds no Node toolchain
+  to the scan surface.
+- **Single worker per pod**: scale with replicas rather than uvicorn workers,
+  which keeps the Prometheus registry per-process and its counters correct.
+- **GitOps**: ArgoCD watches the gitops repo and auto-syncs on `values.yaml`
+  changes. Production changes require CODEOWNERS review.

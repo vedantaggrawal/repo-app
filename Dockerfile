@@ -1,25 +1,63 @@
-# Using alpine for a smaller footprint
-FROM nginx:alpine
+# Base image note: this is glibc (Debian slim), not Alpine, on purpose. The
+# platform's OpenTelemetry operator injects its Python auto-instrumentation via
+# an init container built against glibc; on a musl base that injection fails at
+# runtime. A smaller Alpine image would cost us the tracing the cluster is
+# built around.
+ARG PYTHON_VERSION=3.13
 
-# Copy custom Nginx configuration
-COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
+# ---------- build ----------
+FROM python:${PYTHON_VERSION}-slim AS builder
 
-# Copy the static assets
-COPY ./src/index.html /usr/share/nginx/html/index.html
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# OpenShift normally runs containers as arbitrary non-root users.
-# We must ensure that the directories Nginx needs to write to are accessible by the root group.
-RUN touch /var/run/nginx.pid \
- && chgrp -R 0 /var/run/nginx.pid \
- && chmod -R g=u /var/run/nginx.pid \
- && chgrp -R 0 /var/cache/nginx \
- && chmod -R g=u /var/cache/nginx \
- && chgrp -R 0 /var/log/nginx \
- && chmod -R g=u /var/log/nginx
+# Dependencies land in their own venv so the runtime stage copies one directory
+# and inherits none of pip's build leftovers.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Run as non-root user (1001 is a common safe substitute)
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# ---------- runtime ----------
+FROM python:${PYTHON_VERSION}-slim AS runtime
+
+# Pick up security fixes published since the base image was tagged; this is
+# what keeps the Trivy CRITICAL/HIGH gate passing between base image releases.
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8080 \
+    HOME=/app
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+COPY app ./app
+
+# Build metadata, supplied by CI and surfaced on /api/info and app_build_info.
+ARG APP_VERSION=0.0.0-dev
+ARG GIT_SHA=unknown
+ENV APP_VERSION=${APP_VERSION} \
+    GIT_SHA=${GIT_SHA}
+
+# OpenShift runs containers as an arbitrary UID in the root group, so anything
+# the process reads or writes must be group-accessible rather than owned by a
+# specific user.
+RUN chgrp -R 0 /app /opt/venv \
+ && chmod -R g=u /app /opt/venv
+
 USER 1001
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# No curl or wget in the slim image, and adding one would widen the scan
+# surface — the interpreter we already ship can make the request.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=2).status==200 else 1)"]
+
+CMD ["python", "-m", "app.main"]

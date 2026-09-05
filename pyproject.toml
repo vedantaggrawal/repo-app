@@ -1,0 +1,24 @@
+[project]
+name = "devops-test-webserver"
+version = "0.1.0"
+description = "Platform demo console — FastAPI service that exercises the GitOps platform's observability stack."
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "C4", "RET", "SIM"]
+# S101: pytest relies on bare asserts.
+per-file-ignores = { "tests/*" = ["S101"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Warnings are errors so our own deprecations surface in CI. The exception is
+# Starlette 0.41's TestClient touching the deprecated `anyio.abc.BlockingPortal`
+# alias — upstream's to fix, and unrelated to anything this app does.
+filterwarnings = [
+    "error",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]

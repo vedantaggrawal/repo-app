@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platform Demo Console</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" aria-hidden="true"></span>
+      <h1>Platform Demo Console</h1>
+    </div>
+    <div class="build" id="build-summary">
+      <span class="badge" id="env-badge">…</span>
+      <code id="build-version">loading…</code>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" aria-labelledby="identity-heading">
+      <h2 id="identity-heading">Serving pod</h2>
+      <p class="hint">Reloading round-robins across replicas — the pod name is how you see it.</p>
+      <dl class="identity">
+        <div><dt>Pod</dt><dd id="i-pod">—</dd></div>
+        <div><dt>Node</dt><dd id="i-node">—</dd></div>
+        <div><dt>Namespace</dt><dd id="i-namespace">—</dd></div>
+        <div><dt>Environment</dt><dd id="i-environment">—</dd></div>
+        <div><dt>Version</dt><dd id="i-version">—</dd></div>
+        <div><dt>Git SHA</dt><dd id="i-git">—</dd></div>
+        <div><dt>Python</dt><dd id="i-python">—</dd></div>
+        <div><dt>Uptime</dt><dd id="i-uptime">—</dd></div>
+      </dl>
+      <p class="local-time">Local time <span id="clock">—</span></p>
+    </section>
+
+    <section class="panel" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">Traffic controls</h2>
+      <p class="hint">Every request here lands in Mimir, Loki and Tempo.</p>
+
+      <div class="control">
+        <label for="latency">Latency <output id="latency-out">250</output> ms</label>
+        <input type="range" id="latency" min="0" max="3000" step="50" value="250">
+      </div>
+
+      <div class="control">
+        <label for="burn">CPU burn <output id="burn-out">0</output> ms</label>
+        <input type="range" id="burn" min="0" max="2000" step="50" value="0">
+      </div>
+
+      <div class="control row">
+        <div>
+          <label for="count">Requests</label>
+          <input type="number" id="count" min="1" max="500" value="25">
+        </div>
+        <div>
+          <label for="concurrency">Concurrency</label>
+          <input type="number" id="concurrency" min="1" max="50" value="5">
+        </div>
+        <div>
+          <label for="code">Error code</label>
+          <select id="code">
+            <option>500</option><option>502</option><option>503</option><option>429</option><option>404</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-load" class="primary">Generate load</button>
+        <button id="btn-error">Fire error</button>
+        <button id="btn-downstream">Call downstream</button>
+        <button id="btn-echo">Echo headers</button>
+        <button id="btn-ready" class="danger">Mark unready</button>
+      </div>
+    </section>
+
+    <section class="panel wide" aria-labelledby="stats-heading">
+      <h2 id="stats-heading">This session</h2>
+      <p class="hint">Measured in your browser — the authoritative numbers are in Grafana.</p>
+      <div class="stats">
+        <div class="stat"><span class="stat-value" id="s-total">0</span><span class="stat-label">requests</span></div>
+        <div class="stat"><span class="stat-value ok" id="s-ok">0</span><span class="stat-label">succeeded</span></div>
+        <div class="stat"><span class="stat-value err" id="s-err">0</span><span class="stat-label">failed</span></div>
+        <div class="stat"><span class="stat-value" id="s-p50">—</span><span class="stat-label">p50 ms</span></div>
+        <div class="stat"><span class="stat-value" id="s-p95">—</span><span class="stat-label">p95 ms</span></div>
+      </div>
+    </section>
+
+    <section class="panel wide" aria-labelledby="log-heading">
+      <div class="log-head">
+        <h2 id="log-heading">Request log</h2>
+        <button id="btn-clear" class="ghost">Clear</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Method</th><th>Endpoint</th><th>Status</th><th class="num">ms</th><th>Detail</th></tr>
+          </thead>
+          <tbody id="log"><tr class="empty"><td colspan="6">No requests yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a href="/docs">API docs</a> · <a href="/metrics">/metrics</a> · <a href="/healthz">/healthz</a> · <a href="/readyz">/readyz</a>
+  </footer>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
