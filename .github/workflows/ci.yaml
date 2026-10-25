@@ -128,6 +128,8 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
+          # Fail only on fixable HIGH/CRITICAL (policy); unfixed distro CVEs can't be acted on.
+          ignore-unfixed: true
       - uses: docker/build-push-action@v5
         with:
           context: .
@@ -162,6 +164,8 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
+          # Fail only on fixable HIGH/CRITICAL (policy); unfixed distro CVEs can't be acted on.
+          ignore-unfixed: true
       - name: Promote to release repo
         run: |
           docker buildx imagetools create \
