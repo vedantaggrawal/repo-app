@@ -21,9 +21,35 @@ jobs:
           npm install -g htmlhint
           htmlhint src/index.html
 
+  # Row-level security: tenant isolation of the DB migrations, against a real Postgres
+  db-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: db/requirements.txt
+      - run: pip install -r db/requirements.txt
+      - run: pytest db/tests
+
   # PR or push to main — build artifact with sha tag
   build:
-    needs: lint-and-test
+    needs: [lint-and-test, db-rls]
     if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
     permissions:
