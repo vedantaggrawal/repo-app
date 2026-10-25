@@ -11,6 +11,18 @@ from fastapi import FastAPI, Header, HTTPException
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
+# SQL comments carry the traceparent (OpenTelemetry's built-in sqlcommenter;
+# the standalone google/sqlcommenter is archived). The operator injects the
+# instrumentation packages; the Deployment disables its auto psycopg hook
+# (OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=psycopg) so this one, with the
+# commenter, is the only hook. Without the agent the app runs uninstrumented.
+try:
+    from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
+
+    PsycopgInstrumentor().instrument(enable_commenter=True)
+except ImportError:
+    pass
+
 pool = ConnectionPool(open=False, min_size=1, max_size=5)
 app = FastAPI(on_startup=[pool.open], on_shutdown=[pool.close])
 
