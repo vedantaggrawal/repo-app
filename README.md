@@ -245,3 +245,12 @@ This removes the Kind cluster and all resources.
 - **Multi-arch**: CI builds `linux/amd64` and `linux/arm64` images (Apple Silicon compatible).
 - **Vulnerability scanning**: Trivy runs on every build and on every promote. CRITICAL/HIGH findings block the pipeline.
 - **GitOps**: ArgoCD watches the gitops repo and auto-syncs on `values.yaml` changes. Production changes require CODEOWNERS review.
+
+## services/tenant-api
+
+FastAPI + psycopg 3 over the RLS-protected `items` table. Each request runs in one transaction
+that sets `app.tenant_id` via `set_config(..., true)`. `x-tenant-id` (set by the Gateway from the
+JWT) maps to the tenant uuid as `uuid5(NAMESPACE_URL, "eve-tenant:" + x-tenant-id)`.
+Connection settings come from libpq env (`PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`).
+`migrate.py` applies `db/migrations` once each as the owner role (run it as an initContainer).
+Image: `ghcr.io/vedantaggrawal/repo-app-tenant-api:sha-<short>` (built from the repo root).
