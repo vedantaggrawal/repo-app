@@ -8,6 +8,7 @@ import uuid
 from contextlib import contextmanager
 
 from fastapi import FastAPI, Header, HTTPException
+from psycopg.errors import UniqueViolation
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
 
@@ -60,8 +61,11 @@ def list_items(x_tenant_id: str | None = Header(None)):
 @app.post("/items", status_code=201)
 def create_item(item: ItemIn, x_tenant_id: str | None = Header(None)):
     tenant = tenant_uuid(x_tenant_id)
-    with tenant_tx(tenant) as conn:
-        row = conn.execute(
-            "INSERT INTO items (tenant_id, name) VALUES (%s, %s) RETURNING id, name", (tenant, item.name)
-        ).fetchone()
+    try:
+        with tenant_tx(tenant) as conn:
+            row = conn.execute(
+                "INSERT INTO items (tenant_id, name) VALUES (%s, %s) RETURNING id, name", (tenant, item.name)
+            ).fetchone()
+    except UniqueViolation:
+        raise HTTPException(409, "item name already exists for this tenant")
     return {"id": str(row[0]), "name": row[1]}
