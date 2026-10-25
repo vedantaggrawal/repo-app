@@ -1,6 +1,10 @@
 # Using alpine for a smaller footprint
 FROM nginx:alpine
 
+# Pull fixed Alpine packages: the floating base tag lags security fixes, and
+# CI fails the build on any fixable HIGH/CRITICAL CVE (Trivy).
+RUN apk upgrade --no-cache
+
 # Copy custom Nginx configuration
 COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
 
